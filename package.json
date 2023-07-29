@@ -1,6 +1,6 @@
 {
 	"name": "misskey",
-	"version": "13.14.2+tirr.1",
+	"version": "13.14.2-yurigarden.0",
 	"codename": "nasubi",
 	"repository": {
 		"type": "git",
