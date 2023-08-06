@@ -464,12 +464,11 @@ defineExpose({
 				}
 
 				> .body {
-					display: grid;
-					grid-template-columns: var(--columns);
+					display: flex;
+					flex-wrap: wrap;
 					font-size: 30px;
 
 					> .item {
-						aspect-ratio: 1 / 1;
 						width: auto;
 						height: auto;
 						min-width: 0;
@@ -486,12 +485,11 @@ defineExpose({
 		> .emojis {
 			::v-deep(section) {
 				> .body {
-					display: grid;
-					grid-template-columns: var(--columns);
+					display: flex;
+					flex-wrap: wrap;
 					font-size: 30px;
 
 					> .item {
-						aspect-ratio: 1 / 1;
 						width: auto;
 						height: auto;
 						min-width: 0;
@@ -591,11 +589,10 @@ defineExpose({
 				> .item {
 					position: relative;
 					padding: 0;
-					width: var(--eachSize);
 					height: var(--eachSize);
-					contain: strict;
 					border-radius: 4px;
 					font-size: 24px;
+					margin: 2px 5px;
 
 					&:focus-visible {
 						outline: solid 2px var(--focus);
@@ -603,6 +600,9 @@ defineExpose({
 					}
 
 					&:hover {
+						z-index: 3;
+					  outline: 2px rgba(255,255,255,0.9) solid;
+					  box-shadow: 0 2px 8px 0px rgba(0,0,0,0.8);
 						background: rgba(0, 0, 0, 0.05);
 					}
 
