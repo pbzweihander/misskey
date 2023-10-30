@@ -282,11 +282,14 @@ export class OAuth2ProviderService {
 						accessToken.userId,
 						() => this.usersRepository.findOneBy({ id: accessToken.userId }) as Promise<MiLocalUser>,
 					);
+					const profile = await this.cacheService.userProfileCache.fetch(user.id);
 
 					reply.send({
 						sub: user.id,
 						name: user.username,
 						preferred_username: user.name,
+						email: profile.email,
+						picture: user.avatarUrl,
 					});
 					return;
 				}
