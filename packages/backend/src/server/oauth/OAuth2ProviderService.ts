@@ -286,8 +286,7 @@ export class OAuth2ProviderService {
 
 					reply.send({
 						sub: user.id,
-						name: user.username,
-						preferred_username: user.name,
+						preferred_username: user.name ?? user.username,
 						email: profile.email,
 						picture: user.avatarUrl,
 					});
