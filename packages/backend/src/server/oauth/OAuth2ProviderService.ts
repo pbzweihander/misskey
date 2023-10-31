@@ -4,7 +4,7 @@
  */
 
 import { fileURLToPath } from 'node:url';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnApplicationShutdown } from '@nestjs/common';
 import oauth2orize, { type OAuth2, AuthorizationError, ValidateFunctionArity2, OAuth2Req, MiddlewareRequest } from 'oauth2orize';
 import oauth2Pkce from 'oauth2orize-pkce';
 import fastifyView from '@fastify/view';
@@ -12,6 +12,7 @@ import pug from 'pug';
 import bodyParser from 'body-parser';
 import fastifyExpress from '@fastify/express';
 import { verifyChallenge } from 'pkce-challenge';
+import { Redis } from 'ioredis';
 import { secureRndstr } from '@/misc/secure-rndstr.js';
 import { HttpRequestService } from '@/core/HttpRequestService.js';
 import { kinds } from '@/misc/api-permissions.js';
@@ -22,7 +23,7 @@ import type { AccessTokensRepository, UsersRepository } from '@/models/_.js';
 import { IdService } from '@/core/IdService.js';
 import { CacheService } from '@/core/CacheService.js';
 import type { MiLocalUser } from '@/models/User.js';
-import { MemoryKVCache } from '@/misc/cache.js';
+import { RedisKVCache } from '@/misc/cache.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import Logger from '@/logger.js';
 import type { ServerResponse } from 'node:http';
@@ -35,6 +36,19 @@ import type { FastifyInstance } from 'fastify';
 interface ClientInformation {
 	id: string;
 	redirectUri: string;
+}
+
+interface GrantCode {
+	clientId: string,
+	userId: string,
+	redirectUri: string,
+	codeChallenge: string,
+	scopes: string[],
+
+	// fields to prevent multiple code use
+	grantedToken?: string,
+	revoked?: boolean,
+	used?: boolean,
 }
 
 type OmitFirstElement<T extends unknown[]> = T extends [unknown, ...(infer R)]
@@ -86,15 +100,29 @@ function getQueryMode(issuerUrl: string): oauth2orize.grant.Options['modes'] {
  * 2. oauth/decision will call load() to retrieve the parameters and then remove()
  */
 class OAuth2Store {
-	#cache = new MemoryKVCache<OAuth2>(1000 * 60 * 5); // expires after 5min
+	#cache: RedisKVCache<OAuth2 | undefined>; // expires after 5min
 
-	load(req: OAuth2DecisionRequest, cb: (err: Error | null, txn?: OAuth2) => void): void {
+	constructor(redisClient: Redis) {
+		this.#cache = new RedisKVCache<OAuth2 | undefined>(
+			redisClient,
+			'OAuth2Store',
+			{
+				lifetime: 1000 * 60 * 60 * 1, // 1h
+				memoryCacheLifetime: 1000 * 60 * 5, // 5m
+				fetcher: async () => undefined,
+				toRedisConverter: (value) => JSON.stringify(value),
+				fromRedisConverter: (value) => JSON.parse(value),
+			},
+		);
+	}
+
+	async load(req: OAuth2DecisionRequest, cb: (err: Error | null, txn?: OAuth2) => void): Promise<void> {
 		const { transaction_id } = req.body;
 		if (!transaction_id) {
 			cb(new AuthorizationError('Missing transaction ID', 'invalid_request'));
 			return;
 		}
-		const loaded = this.#cache.get(transaction_id);
+		const loaded = await this.#cache.get(transaction_id);
 		if (!loaded) {
 			cb(new AuthorizationError('Invalid or expired transaction ID', 'access_denied'));
 			return;
@@ -112,14 +140,20 @@ class OAuth2Store {
 		this.#cache.delete(tid);
 		cb();
 	}
+
+	@bindThis
+	public dispose(): void {
+		this.#cache.dispose();
+	}
 }
 
 @Injectable()
-export class OAuth2ProviderService {
-	#server = oauth2orize.createServer({
-		store: new OAuth2Store(),
-	});
+export class OAuth2ProviderService implements OnApplicationShutdown {
+	store: OAuth2Store;
+	#server: oauth2orize.OAuth2Server;
 	#logger: Logger;
+
+	private grantCodeCache: RedisKVCache<GrantCode | undefined>;
 
 	constructor(
 		@Inject(DI.config)
@@ -132,21 +166,24 @@ export class OAuth2ProviderService {
 		private usersRepository: UsersRepository,
 		private cacheService: CacheService,
 		loggerService: LoggerService,
+		@Inject(DI.redis)
+		redisClient: Redis,
 	) {
+		this.store = new OAuth2Store(redisClient);
+		this.#server = oauth2orize.createServer({ store: this.store });
 		this.#logger = loggerService.getLogger('oauth');
 
-		const grantCodeCache = new MemoryKVCache<{
-			clientId: string,
-			userId: string,
-			redirectUri: string,
-			codeChallenge: string,
-			scopes: string[],
-
-			// fields to prevent multiple code use
-			grantedToken?: string,
-			revoked?: boolean,
-			used?: boolean,
-		}>(1000 * 60 * 5); // expires after 5m
+		this.grantCodeCache = new RedisKVCache<GrantCode | undefined>(
+			redisClient,
+			'OAuth2ProviderServiceGrantCode',
+			{
+				lifetime: 1000 * 60 * 60 * 1, // 1h
+				memoryCacheLifetime: 1000 * 60 * 5, // 5m
+				fetcher: async () => undefined,
+				toRedisConverter: (value) => JSON.stringify(value),
+				fromRedisConverter: (value) => JSON.parse(value),
+			},
+		);
 
 		// https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics
 		// "Authorization servers MUST support PKCE [RFC7636]."
@@ -169,7 +206,7 @@ export class OAuth2ProviderService {
 				this.#logger.info(`Sending authorization code on behalf of user ${user.id} to ${client.id} through ${redirectUri}, with scope: [${areq.scope}]`);
 
 				const code = secureRndstr(128);
-				grantCodeCache.set(code, {
+				this.grantCodeCache.set(code, {
 					clientId: client.id,
 					userId: user.id,
 					redirectUri,
@@ -182,7 +219,7 @@ export class OAuth2ProviderService {
 		this.#server.exchange(oauth2orize.exchange.authorizationCode((client, code, redirectUri, body, authInfo, done) => {
 			(async (): Promise<OmitFirstElement<Parameters<typeof done>> | undefined> => {
 				this.#logger.info('Checking the received authorization code for the exchange');
-				const granted = grantCodeCache.get(code);
+				const granted = await this.grantCodeCache.get(code);
 				if (!granted) {
 					return;
 				}
@@ -193,7 +230,7 @@ export class OAuth2ProviderService {
 				// previously issued based on that authorization code."
 				if (granted.used) {
 					this.#logger.info(`Detected multiple code use from ${granted.clientId} for user ${granted.userId}. Revoking the code.`);
-					grantCodeCache.delete(code);
+					this.grantCodeCache.delete(code);
 					granted.revoked = true;
 					if (granted.grantedToken) {
 						await accessTokensRepository.delete({ token: granted.grantedToken });
@@ -385,5 +422,16 @@ export class OAuth2ProviderService {
 				},
 			});
 		});
+	}
+
+	@bindThis
+	public dispose(): void {
+		this.store.dispose();
+		this.grantCodeCache.dispose();
+	}
+
+	@bindThis
+	public onApplicationShutdown(): void {
+		this.dispose();
 	}
 }
