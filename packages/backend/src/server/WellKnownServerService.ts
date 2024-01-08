@@ -92,6 +92,9 @@ export class WellKnownServerService {
 		fastify.get('/.well-known/oauth-authorization-server', async () => {
 			return this.oauth2ProviderService.generateRFC8414();
 		});
+		fastify.get('/.well-known/openid-configuration', async () => {
+			return this.oauth2ProviderService.generateRFC8414();
+		});
 
 		/* TODO
 fastify.get('/.well-known/change-password', async (request, reply) => {
