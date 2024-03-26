@@ -243,7 +243,12 @@ export class ApNoteService {
 					return x;
 				})
 				.catch(async err => {
-					this.logger.warn(`Error in inReplyTo ${note.inReplyTo} - ${err.statusCode ?? err}`);
+					const statusCode = err?.statusCode;
+					this.logger.warn(`Error in inReplyTo ${note.inReplyTo} - ${statusCode ?? err}`);
+					if ([401, 403, 404].includes(statusCode ?? 0)) {
+						this.logger.info('Set inReplyTo to null');
+						return null;
+					}
 					throw err;
 				})
 			: null;
