@@ -56,11 +56,19 @@ export class HttpRequestService {
 			lookup: false,	// nativeのdns.lookupにfallbackしない
 		});
 
+		const socketFamily = {
+			ipv4: 4,
+			ipv6: 6,
+			dual: 0,
+		}[config.outgoingAddressFamily ?? 'dual'];
+
 		this.http = new http.Agent({
 			keepAlive: true,
 			keepAliveMsecs: 30 * 1000,
 			lookup: cache.lookup as unknown as net.LookupFunction,
 			localAddress: config.outgoingAddress,
+			family: socketFamily,
+			autoSelectFamilyAttemptTimeout: config.autoSelectFamilyAttemptTimeout,
 		});
 
 		this.https = new https.Agent({
@@ -68,6 +76,8 @@ export class HttpRequestService {
 			keepAliveMsecs: 30 * 1000,
 			lookup: cache.lookup as unknown as net.LookupFunction,
 			localAddress: config.outgoingAddress,
+			family: socketFamily,
+			autoSelectFamilyAttemptTimeout: config.autoSelectFamilyAttemptTimeout,
 		});
 
 		const maxSockets = Math.max(256, config.deliverJobConcurrency ?? 128);
@@ -81,6 +91,8 @@ export class HttpRequestService {
 				scheduling: 'lifo',
 				proxy: config.proxy,
 				localAddress: config.outgoingAddress,
+				family: socketFamily,
+				autoSelectFamilyAttemptTimeout: config.autoSelectFamilyAttemptTimeout,
 			})
 			: this.http;
 
@@ -93,6 +105,8 @@ export class HttpRequestService {
 				scheduling: 'lifo',
 				proxy: config.proxy,
 				localAddress: config.outgoingAddress,
+				family: socketFamily,
+				autoSelectFamilyAttemptTimeout: config.autoSelectFamilyAttemptTimeout,
 			})
 			: this.https;
 	}
