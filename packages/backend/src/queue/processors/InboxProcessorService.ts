@@ -230,6 +230,9 @@ export class InboxProcessorService implements OnApplicationShutdown {
 				if (e.id === '85ab9bd7-3a41-4530-959d-f07073900109') {
 					return 'actor has been suspended';
 				}
+				if (e.id === '9f466dab-c856-48cd-9e65-ff90ff750580') {
+					return 'note contains too many mentions';
+				}
 				if (e.id === 'd450b8a9-48e4-4dab-ae36-f4db763fda7c') { // invalid Note
 					return e.message;
 				}
