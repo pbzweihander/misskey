@@ -244,6 +244,9 @@ id: 'aidx'
 # IP address family used for outgoing request (ipv4, ipv6 or dual)
 #outgoingAddressFamily: ipv4
 
+# Timeout for auto-selecting outgoing IP family
+#autoSelectFamilyAttemptTimeout: 250
+
 # Proxy for HTTP/HTTPS
 #
 # IMPORTANT: When a proxy is configured, Misskey does NOT check whether
