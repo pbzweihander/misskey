@@ -1,0 +1,17 @@
+diff --git a/packages/backend/scripts/compile_config.js b/packages/backend/scripts/compile_config.js
+index e78fa3dc9..742bdac60 100644
+--- a/packages/backend/scripts/compile_config.js
++++ b/packages/backend/scripts/compile_config.js
+@@ -44,11 +44,6 @@ function yamlToJson(ymlPath) {
+ 	}), 'utf-8');
+ }
+ 
+-if (process.env.MISSKEY_CONFIG_YML) {
+-	const customYmlPath = resolve(configDir, process.env.MISSKEY_CONFIG_YML);
+-	yamlToJson(customYmlPath);
+-} else {
+-	yamlToJson(resolve(configDir, process.env.NODE_ENV === 'test' ? 'test.yml' : 'default.yml'));
+-}
++yamlToJson(process.env.MISSKEY_CONFIG_YML ?? 'config.yml');
+ 
+ console.log('Configuration compiled ✓');

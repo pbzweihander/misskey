@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+if (( $# != 1 )); then
+	echo "Usage: $0 <config file>" >&2
+	false
+fi
+
+export PATH="@runtimePaths@"
+export LD_LIBRARY_PATH="@runtimeLibs@"
+export NODE_ENV=production
+
+cd "@app@/packages/backend"
+
+echo 'Converting config file' >&2
+MISSKEY_CONFIG_YML="$(realpath $1)" node ./scripts/compile_config.js
+
+# pnpm migrate
+echo 'Running migrations' >&2
+./node_modules/.bin/typeorm migration:run -d ormconfig.js
+
+# pnpm check:connect
+echo 'Checking configuration' >&2
+node ./scripts/check_connect.js
+
+# pnpm start
+echo 'Starting Misskey server' >&2
+export LD_PRELOAD="@preloadLib@"
+exec node ./built/boot/entry.js
