@@ -1,0 +1,13 @@
+#!/bin/bash
+set -e
+
+if (( $# != 1 )); then
+	echo "Usage: $0 <config file>" >&2
+	false
+fi
+
+export PATH="@runtimePaths@"
+export MISSKEY_CONFIG_YML="$(realpath $1)"
+
+portLine="$(grep '^port: ' "$MISSKEY_CONFIG_YML") | cut -wf2"
+exec curl -Sfso/dev/null "http://localhost:${port}/healthz"

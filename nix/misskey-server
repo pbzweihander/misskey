@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+if (( $# != 1 )); then
+	echo "Usage: $0 <config file>" >&2
+	false
+fi
+
+cd "@app@"
+
+export PATH="@runtimePaths@"
+export LD_LIBRARY_PATH="@runtimeLibs@"
+
+export NODE_ENV=production
+export MISSKEY_CONFIG_YML="$(realpath $1)"
+export LD_PRELOAD="@preloadLib@"
+exec node ./scripts/start.mjs
