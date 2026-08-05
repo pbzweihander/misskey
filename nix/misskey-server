@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 if (( $# != 1 )); then
@@ -12,8 +12,12 @@ export NODE_ENV=production
 
 cd "@app@/packages/backend"
 
-echo 'Converting config file' >&2
-MISSKEY_CONFIG_YML="$(realpath $1)" node ./scripts/compile_config.js
+if [[ $1 == *".json" ]]; then
+	export MISSKEY_CONFIG_JSON="$(realpath $1)"
+else
+	echo 'Converting config file' >&2
+	MISSKEY_CONFIG_YML="$(realpath $1)" node ./scripts/compile_config.js
+fi
 
 # pnpm migrate
 echo 'Running migrations' >&2

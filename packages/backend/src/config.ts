@@ -239,7 +239,9 @@ const projectBuiltDir = resolve(rootDir, 'built');
 
 const compiledConfigFilePathForTest = resolve(projectBuiltDir, '._config_.json');
 
-export const compiledConfigFilePath = fs.existsSync(compiledConfigFilePathForTest)
+export const compiledConfigFilePath = process.env.MISSKEY_CONFIG_JSON
+	? resolve(configDir, process.env.MISSKEY_CONFIG_JSON)
+	: fs.existsSync(compiledConfigFilePathForTest)
 	? compiledConfigFilePathForTest
 	: resolve(projectBuiltDir, '.config.json');
 
